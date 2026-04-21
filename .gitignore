@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# macOS and filesystem artifacts
+.DS_Store
+._*
+
+# IDE/editor
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Training/evaluation outputs
+outputs/
+checkpoints/
+
+# Caches and temporary artifacts
+*.tmp
+*.temp
+
+# Generated metrics/log artifacts
+metrics/
+
+# Data files (do not commit protected datasets)
+data/*
+!data/.gitkeep
+!data/create_split.py
+*.pt
+lora/
+models/lora/

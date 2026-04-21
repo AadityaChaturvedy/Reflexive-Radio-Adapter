@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+title: Reflexive Radio Adapter (RRA)
+message: If you use this software, please cite it.
+type: software
+authors:
+  - family-names: Chaturvedy
+    given-names: Aaditya
+  - family-names: R
+    given-names: Mangalagowri
+  - family-names: Sivakumar
+    given-names: Soubraylu
+  - family-names: V
+    given-names: Deeban Chakravarthy
+license: MIT
+version: 1.0.0
+date-released: 2026-04-21
+repository-code: https://github.com/AadityaChaturvedy/Reflexive-Radio-Adapter
