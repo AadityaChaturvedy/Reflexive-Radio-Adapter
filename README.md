@@ -86,13 +86,46 @@ python training/train_model.py \
 
 ## 4) Evaluation
 
+The evaluation script supports two protocols for setting the classification decision thresholds.
+
+### Option A: Zero-Leakage Protocol (Recommended)
+Tuning thresholds on the test set is a form of data leakage. To evaluate under a scientifically rigorous zero-leakage protocol:
+
+1. **Extract optimal decision thresholds on the validation set**:
+   ```bash
+   python evaluation/evaluate_model.py \
+   	--checkpoint_dir outputs/run_001/checkpoints/best \
+   	--vision_ckpt /path/to/biovil_t_image_model_proj_size_128.pt \
+   	--data_root /path/to/mimic_root \
+   	--val_csv /path/to/val.csv \
+   	--output_dir outputs/run_001/val_thresholds \
+   	--gen_samples 0
+   ```
+   This will save the validation-tuned thresholds into `outputs/run_001/val_thresholds/eval_results.json`.
+
+2. **Evaluate on the test set using those validation thresholds**:
+   ```bash
+   python evaluation/evaluate_model.py \
+   	--checkpoint_dir outputs/run_001/checkpoints/best \
+   	--vision_ckpt /path/to/biovil_t_image_model_proj_size_128.pt \
+   	--data_root /path/to/mimic_root \
+   	--val_csv /path/to/test.csv \
+   	--output_dir outputs/run_001/evaluation \
+   	--threshold_file outputs/run_001/val_thresholds/eval_results.json \
+   	--gen_samples 1000 \
+   	--batch_size 8 \
+   	--num_workers 2
+   ```
+
+### Option B: Test-Set Optimized Protocol (Outdated)
+If you wish to optimize thresholds directly on the test set (which results in optimistically biased metrics):
 ```bash
 python evaluation/evaluate_model.py \
 	--checkpoint_dir outputs/run_001/checkpoints/best \
 	--vision_ckpt /path/to/biovil_t_image_model_proj_size_128.pt \
 	--data_root /path/to/mimic_root \
 	--val_csv /path/to/test.csv \
-	--output_dir outputs/run_001/evaluation \
+	--output_dir outputs/run_001/evaluation_test_opt \
 	--gen_samples 1000 \
 	--batch_size 8 \
 	--num_workers 2
