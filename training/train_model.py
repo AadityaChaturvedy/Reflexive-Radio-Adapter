@@ -643,15 +643,19 @@ def save_checkpoint(model, optimizer, scheduler, epoch, step, metrics, is_best=F
     return checkpoint_dir
 
 
-def load_checkpoint(model, optimizer, scheduler, checkpoint_dir=None):
+def load_checkpoint(model, checkpoint_dir=None):
     """Load checkpoint with error handling"""
+    is_explicit = checkpoint_dir is not None
 
     if checkpoint_dir is None:
         checkpoint_dir = os.path.join(cfg.OUTPUT_DIR, "checkpoints", "latest")
 
     if not os.path.exists(checkpoint_dir):
-        logger.info("No checkpoint found. Starting from scratch.")
-        return 0, 0, {}
+        if is_explicit:
+            raise FileNotFoundError(f"Specified checkpoint directory not found: {checkpoint_dir}")
+        else:
+            logger.info("No checkpoint found. Starting from scratch.")
+            return 0, 0, {}, None
 
     logger.info(f"Loading checkpoint from {checkpoint_dir}")
 
@@ -672,21 +676,22 @@ def load_checkpoint(model, optimizer, scheduler, checkpoint_dir=None):
         base_model = model.llm.base_model
         model.llm = PeftModel.from_pretrained(base_model, lora_dir, is_trainable=True)
 
-        optimizer.load_state_dict(checkpoint['optimizer_state'])
-        scheduler.load_state_dict(checkpoint['scheduler_state'])
-
         epoch = checkpoint['epoch']
         step = checkpoint['step']
         metrics = checkpoint.get('metrics', {})
 
         logger.info(f"Resumed from epoch {epoch}, step {step}")
 
-        return epoch, step, metrics
+        return epoch, step, metrics, checkpoint
 
     except Exception as e:
-        logger.error(f"Failed to load checkpoint: {e}")
-        logger.info("Starting from scratch instead.")
-        return 0, 0, {}
+        if is_explicit:
+            logger.error(f"Failed to load specified checkpoint: {e}")
+            raise e
+        else:
+            logger.error(f"Failed to load checkpoint: {e}")
+            logger.info("Starting from scratch instead.")
+            return 0, 0, {}, None
 
 
 # ==============================================================================
@@ -839,6 +844,8 @@ def main():
     parser.add_argument("--seed", type=int, default=cfg.SEED)
     parser.add_argument("--val_interval_steps", type=int, default=cfg.VAL_INTERVAL_STEPS)
     parser.add_argument("--early_stopping_patience", type=int, default=cfg.EARLY_STOPPING_PATIENCE)
+    parser.add_argument("--checkpoint", default=None,
+                        help="Optional path to an already saved checkpoint directory to resume training from.")
     args = parser.parse_args()
 
     cfg.DATA_SOURCE = args.data_source
@@ -945,7 +952,10 @@ def main():
     pos_weight = compute_pos_weight(train_dataset, device)
     logger.info(f"Pos Weights (min/max):   {pos_weight.min().item():.2f} / {pos_weight.max().item():.2f}")
 
-    logger.info("Model built successfully")
+    # Load checkpoint if specified or fallback to default
+    start_epoch, global_step, history, checkpoint = load_checkpoint(model, args.checkpoint)
+
+    logger.info("Model built/loaded successfully")
 
     optimizer_params = [
         {'params': model.llm.parameters(), 'lr': cfg.LEARNING_RATE},
@@ -973,8 +983,13 @@ def main():
 
     logger.info(f"Scheduler: {total_steps_for_scheduler} total steps, {warmup_steps} warmup steps")
 
-    # Load checkpoint if exists (pass the placeholder scheduler; it gets overwritten)
-    start_epoch, global_step, history = load_checkpoint(model, optimizer, scheduler)
+    if checkpoint is not None:
+        try:
+            optimizer.load_state_dict(checkpoint['optimizer_state'])
+            scheduler.load_state_dict(checkpoint['scheduler_state'])
+            logger.info("Optimizer and scheduler states restored from checkpoint.")
+        except Exception as e:
+            logger.warning(f"Could not restore optimizer/scheduler state: {e}. Starting with fresh optimizer/scheduler.")
 
     if not history:
         history = defaultdict(list)
