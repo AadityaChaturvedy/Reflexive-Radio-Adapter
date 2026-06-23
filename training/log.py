@@ -535,7 +535,7 @@ class StabilityMetricsTracker:
 
         logger.info("="*80 + "\n")
 
-    def plot_training_progress(history):
+    def plot_training_progress(history, cfg):
         """Plot and save training progress"""
 
         if not history or 'train_total' not in history:

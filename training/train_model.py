@@ -1181,7 +1181,7 @@ def main():
             epoch + 1, global_step, val_metrics, is_best
         )
 
-        StabilityMetricsTracker.plot_training_progress(history)
+        StabilityMetricsTracker.plot_training_progress(history, cfg)
         metrics_tracker.save_all_metrics()
 
         # Early stopping check
