@@ -288,7 +288,7 @@ class EfficientVisionEncoder(nn.Module):
 
         if pretrained_path and os.path.exists(pretrained_path):
             logger.info(f"Loading BioViL weights from {pretrained_path}")
-            state = torch.load(pretrained_path, map_location='cpu')
+            state = torch.load(pretrained_path, map_location='cpu', weights_only=False)
 
             new_state = {}
             for k, v in state.items():
@@ -661,10 +661,10 @@ def load_checkpoint(model, checkpoint_dir=None):
 
     try:
         state_path = os.path.join(checkpoint_dir, "state.pt")
-        checkpoint = torch.load(state_path, map_location='cpu')
+        checkpoint = torch.load(state_path, map_location='cpu', weights_only=False)
 
         component_path = os.path.join(checkpoint_dir, "components.pt")
-        components = torch.load(component_path, map_location='cpu')
+        components = torch.load(component_path, map_location='cpu', weights_only=False)
 
         model.vision_encoder.load_state_dict(components['vision_encoder'])
         model.qformer.load_state_dict(components['qformer'])

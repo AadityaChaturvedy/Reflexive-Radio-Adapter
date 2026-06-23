@@ -108,7 +108,7 @@ class EfficientVisionEncoder(nn.Module):
         self.layer4 = backbone.layer4
 
         if pretrained_path and os.path.exists(pretrained_path):
-            state     = torch.load(pretrained_path, map_location='cpu')
+            state     = torch.load(pretrained_path, map_location='cpu', weights_only=False)
             new_state = {}
             for k, v in state.items():
                 k = (k.replace("module.", "")
@@ -422,7 +422,7 @@ def load_model(checkpoint_dir, device, vision_ckpt):
     model          = OptimizedRRA(llm, vision_encoder).to(device)
 
     components = torch.load(
-        os.path.join(checkpoint_dir, "components.pt"), map_location='cpu'
+        os.path.join(checkpoint_dir, "components.pt"), map_location='cpu', weights_only=False
     )
     model.vision_encoder.load_state_dict(components['vision_encoder'])
     model.qformer.load_state_dict(components['qformer'])
