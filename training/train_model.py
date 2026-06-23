@@ -585,16 +585,21 @@ def compute_total_loss(outputs, clinical_labels, config, pos_weight):
 # CHECKPOINT MANAGEMENT
 # ==============================================================================
 
-def save_checkpoint(model, optimizer, scheduler, epoch, step, metrics, is_best=False):
+def save_checkpoint(model, optimizer, scheduler, epoch, step, history, is_best=False):
     """Save complete checkpoint"""
 
     checkpoint_dir = os.path.join(cfg.OUTPUT_DIR, "checkpoints")
     os.makedirs(checkpoint_dir, exist_ok=True)
 
+    # Convert defaultdict to standard dict for clean pickling
+    history_dict = dict(history)
+
     checkpoint = {
         'epoch': epoch,
         'step': step,
-        'metrics': metrics,
+        'history': history_dict,
+        # For compatibility: extract the latest metrics as single values
+        'metrics': {k: v[-1] if isinstance(v, list) and len(v) > 0 else v for k, v in history_dict.items()},
         'optimizer_state': optimizer.state_dict(),
         'scheduler_state': scheduler.state_dict(),
         'config': {
@@ -636,7 +641,7 @@ def save_checkpoint(model, optimizer, scheduler, epoch, step, metrics, is_best=F
         if os.path.exists(best_dir):
             shutil.rmtree(best_dir)
         shutil.copytree(latest_dir, best_dir)
-        logger.info(f"New best model saved (F1: {metrics.get('val_f1', 0):.4f})")
+        logger.info(f"New best model saved (F1: {checkpoint['metrics'].get('val_f1', 0):.4f})")
 
     logger.info(f"Checkpoint saved: epoch {epoch}, step {step}")
 
@@ -673,16 +678,31 @@ def load_checkpoint(model, checkpoint_dir=None):
 
         lora_dir = os.path.join(checkpoint_dir, "lora")
         from peft import PeftModel
-        base_model = model.llm.base_model
+        if hasattr(model.llm, "base_model") and hasattr(model.llm.base_model, "model"):
+            base_model = model.llm.base_model.model
+        else:
+            base_model = model.llm
         model.llm = PeftModel.from_pretrained(base_model, lora_dir, is_trainable=True)
 
         epoch = checkpoint['epoch']
         step = checkpoint['step']
-        metrics = checkpoint.get('metrics', {})
+
+        history = checkpoint.get('history', None)
+        if history is None:
+            # Backwards compatibility: convert single metrics to lists
+            metrics = checkpoint.get('metrics', {})
+            history = defaultdict(list)
+            for k, v in metrics.items():
+                if isinstance(v, list):
+                    history[k] = v
+                else:
+                    history[k] = [v]
+        else:
+            history = defaultdict(list, history)
 
         logger.info(f"Resumed from epoch {epoch}, step {step}")
 
-        return epoch, step, metrics, checkpoint
+        return epoch, step, history, checkpoint
 
     except Exception as e:
         if is_explicit:
@@ -1155,7 +1175,7 @@ def main():
                     # Always save mid-epoch checkpoint; never touch patience here
                     save_checkpoint(
                         model, optimizer, scheduler,
-                        epoch + 1, global_step, val_metrics, is_best
+                        epoch + 1, global_step, history, is_best
                     )
 
                     model.train()
@@ -1193,7 +1213,7 @@ def main():
 
         save_checkpoint(
             model, optimizer, scheduler,
-            epoch + 1, global_step, val_metrics, is_best
+            epoch + 1, global_step, history, is_best
         )
 
         StabilityMetricsTracker.plot_training_progress(history, cfg)
