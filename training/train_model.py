@@ -29,7 +29,7 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import f1_score, precision_recall_fscore_support
 from tqdm.auto import tqdm
 
-from log import StabilityMetricsTracker, plot_training_progress
+from log import StabilityMetricsTracker
 
 # Update for PyTorch 2.0+ AMP syntax
 try:
@@ -1181,7 +1181,7 @@ def main():
             epoch + 1, global_step, val_metrics, is_best
         )
 
-        plot_training_progress(history)
+        StabilityMetricsTracker.plot_training_progress(history)
         metrics_tracker.save_all_metrics()
 
         # Early stopping check
