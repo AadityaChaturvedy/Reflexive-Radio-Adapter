@@ -29,7 +29,7 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import f1_score, precision_recall_fscore_support
 from tqdm.auto import tqdm
 
-from log import StabilityMetricsTracker
+from log import StabilityMetricsTracker, plot_training_progress
 
 # Update for PyTorch 2.0+ AMP syntax
 try:

@@ -32,13 +32,10 @@ checkpoints/
 # Generated metrics/log artifacts
 metrics/
 
-# Data files
+# Data files (do not commit protected datasets)
 data/*
 !data/.gitkeep
 !data/create_split.py
 *.pt
 lora/
 models/lora/
-
-# Local conference rebuttal notes
-rebuttal_notes.md

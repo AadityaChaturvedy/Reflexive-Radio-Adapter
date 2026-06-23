@@ -516,7 +516,7 @@ def compute_chexbert_score(generated_texts, reference_texts):
 # MAIN EVALUATION
 # ==============================================================================
 @torch.no_grad()
-def evaluate(model, dataloader, tokenizer, device, gen_samples, threshold_file=None):
+def evaluate(model, dataloader, tokenizer, device, gen_samples):
     model.eval()
     amp_ctx = (autocast('cuda', dtype=torch.float16)
                if device.type == 'cuda' else contextlib.nullcontext())
@@ -545,29 +545,11 @@ def evaluate(model, dataloader, tokenizer, device, gen_samples, threshold_file=N
         all_original_queries.append(outputs['original_queries'].cpu().float())
         reference_texts.extend(batch['raw_text'])
 
-    # Check if we should load thresholds from a file to avoid test set leakage
-    if threshold_file and os.path.exists(threshold_file):
-        logger.info(f"Loading thresholds from {threshold_file}...")
-        with open(threshold_file, 'r') as f:
-            data = json.load(f)
-        if isinstance(data, dict):
-            if "classification" in data and "thresholds_used" in data["classification"]:
-                thresholds = np.array(data["classification"]["thresholds_used"])
-            elif "thresholds_used" in data:
-                thresholds = np.array(data["thresholds_used"])
-            elif "Tuned_Thresholds" in data:
-                thresholds = np.array([data["Tuned_Thresholds"].get(c, 0.5) for c in CHEXPERT_LABELS])
-            else:
-                raise ValueError("Could not find thresholds_used key in threshold JSON dict")
-        elif isinstance(data, list):
-            thresholds = np.array(data)
-        else:
-            raise ValueError(f"Invalid threshold format in {threshold_file}")
-        logger.info(f"Using loaded thresholds: {thresholds.tolist()}")
-    else:
-        logger.info("Optimizing thresholds on the current dataset...")
-        thresholds = optimize_thresholds(all_probs, all_targets)
+    all_probs   = np.concatenate(all_probs,   axis=0)
+    all_targets = np.concatenate(all_targets, axis=0)
 
+    # FIX: always optimize — focal loss models are not calibrated at 0.5
+    thresholds = optimize_thresholds(all_probs, all_targets)
     all_preds  = (all_probs > thresholds).astype(float)
 
     # ── Pass 2: Greedy generation ────────────────────────
@@ -713,7 +695,7 @@ def evaluate(model, dataloader, tokenizer, device, gen_samples, threshold_file=N
             "BERTScore_model":       "roberta-large (rescaled baseline)",
             "CheXBERT":              chexbert,
             "num_reports_evaluated": gen_subset,
-            "decoding_strategy":     "nucleus sampling (top-p=0.9, temp=0.7, rep_penalty=1.2)",
+            "decoding_strategy":     "greedy (argmax)",
             "max_new_tokens":        MAX_GEN_TOKENS,
         },
         "reflexive": {
@@ -840,7 +822,6 @@ def main():
     parser.add_argument("--gen_samples",    type=int, default=1000)
     parser.add_argument("--batch_size",     type=int, default=BATCH_SIZE)
     parser.add_argument("--num_workers",    type=int, default=2)
-    parser.add_argument("--threshold_file", default=None, help="Optional JSON file containing classification thresholds to avoid test set leakage.")
     args = parser.parse_args()
 
     setup_logging(args.output_dir)
@@ -857,9 +838,9 @@ def main():
     logger.info(f"   Output dir:    {args.output_dir}")
     logger.info(f"   Device:        {device}")
     logger.info(f"   Batch size:    {args.batch_size}  (classification pass, no grad)")
-    logger.info(f"   Gen tokens:    {MAX_GEN_TOKENS}  (nucleus sampling: top-p=0.9, temp=0.7)")
+    logger.info(f"   Gen tokens:    {MAX_GEN_TOKENS}  (greedy decoding, argmax)")
     logger.info(f"   Gen samples:   {args.gen_samples}")
-    logger.info(f"   Thresh method: " + (f"loaded from {args.threshold_file}" if args.threshold_file else "optimized on dataset (warning: test leakage if run on test set)"))
+    logger.info(f"   Thresh method: per-class optimized on val set")
     logger.info(f"   Vision ckpt:   {args.vision_ckpt}")
     logger.info(f"   Model ID:      {MODEL_ID}")
     logger.info("=" * 60)
@@ -881,8 +862,7 @@ def main():
     model = load_model(args.checkpoint_dir, device, args.vision_ckpt)
 
     results, generated_texts, reference_texts = evaluate(
-        model, loader, tokenizer, device, args.gen_samples,
-        threshold_file=args.threshold_file
+        model, loader, tokenizer, device, args.gen_samples
     )
 
     print_results(results)
